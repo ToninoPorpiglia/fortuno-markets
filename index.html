@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fortuno Markets AI</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>:root{
+  --bg:#0a0a0a; --card:#141414; --fg:#f1efe6; --muted:#9d9a8e; --line:#2b2a24;
+  --gold:#d4af37; --up:#2ecc71; --down:#ff6a5c; --flat:#9d9a8e;
+  --up-bg:#0f2a17; --down-bg:#3a1512; --flat-bg:#232320; --gold-bg:#2a2410;
+  --display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--body);margin:0;
+  padding-block:24px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1,h2{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(28px,6vw,40px);line-height:1.1}
+h1 span{color:var(--gold)}
+h2{font-size:21px;margin-bottom:12px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.sub{color:var(--muted);margin:6px 0 0}
+.verdict{display:flex;gap:14px;align-items:flex-start;background:var(--gold-bg);border:1px solid var(--gold);border-radius:10px;padding:16px;margin-top:16px}
+.verdict b{font-family:var(--display);font-size:18px}
+.verdict p{margin:4px 0 0}
+.pill{display:inline-block;font:500 11px var(--mono);letter-spacing:.04em;text-transform:uppercase;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.bull{background:var(--up-bg);color:var(--up)} .bear{background:var(--down-bg);color:var(--down)} .neut{background:var(--flat-bg);color:var(--flat)}
+.fact{background:var(--flat-bg);color:var(--muted)} .take{background:var(--gold-bg);color:var(--gold)}
+.brief{background:var(--gold);color:#0a0a0a;font-weight:600}
+ul.sum{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.tile .n{font:500 12px var(--mono);color:var(--gold)}
+.tile .p{font:500 19px var(--mono);margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .c{font:500 13px var(--mono);font-variant-numeric:tabular-nums}
+.tile .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
+.up{color:var(--up)} .dn{color:var(--down)} .fl{color:var(--flat)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.bars{display:flex;flex-direction:column;gap:7px}
+.row{display:grid;grid-template-columns:120px 1fr 62px;gap:10px;align-items:center;font-size:13px}
+.row .lab{color:var(--muted)}
+.track{position:relative;height:18px}
+.track:before{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--line)}
+.bar{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.bar.u{left:50%;background:var(--up)} .bar.d{right:50%;background:var(--down)}
+.val{font:500 13px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.note{font-size:12.5px;color:var(--muted);margin:10px 0 0}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:13.5px;font-variant-numeric:tabular-nums}
+th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--gold);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.rk{font:500 15px var(--mono);color:var(--gold);width:34px}
+.heat-super{background:var(--down-bg);color:var(--gold);border:1px solid var(--gold)} .heat-hot{background:var(--gold-bg);color:var(--gold)} .heat-no{background:var(--flat-bg);color:var(--flat)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.two>*{min-width:0}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border:0}.kv span:last-child{text-align:right;max-width:62%}
+.you{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:10px;padding:16px}
+.you ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+details.gloss{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+details.gloss summary{cursor:pointer;font:600 16px var(--display);color:var(--gold)}
+details.gloss dl{margin:12px 0 0;display:grid;gap:10px}
+details.gloss dt{font-weight:600} details.gloss dd{margin:2px 0 0;color:var(--muted)}
+.sources{font-size:12.5px;color:var(--muted)}
+code{font-family:var(--mono);color:var(--gold)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style></head><body><main>
+<header><div class="eyebrow">Friday, October 16, 2026 · 08:30 PM ET</div>
+<h1>Fortuno <span>Markets AI</span></h1>
+<div class="verdict"><span class="pill brief">After-Close Brief</span><div><b>Market for your strategy: not a clean breakout market</b><p>QQQ is below its 20 EMA but still holding up. Be picky and use smaller risk.</p><p class='note'>QQQ $728.00 · 20 EMA $738.83 · 50 SMA $726.41 · tier: <b>NEUTRAL</b></p></div></div></header>
+<section><h2>The 5 things to know</h2><ul class="sum"><li><span class='pill fact'>fact</span> S&amp;P 500 is -1.09% versus the previous close.</li><li><span class='pill fact'>fact</span> Nasdaq is -2.15% versus the previous close.</li><li><span class='pill fact'>fact</span> The 10-year yield is 5.10% (+0.9 basis points; 100 basis points = 1%).</li></ul>
+<p class="note"><span class="pill fact">fact</span> = reported data. <span class="pill take">take</span> = interpretation.</p></section>
+<section><h2>Scoreboard</h2><div class="tiles"><div class='tile'><div class='n'>S&amp;P 500</div><div class='p'>7,659.44</div><div class='c dn'>-1.09%</div><div class='d'>The 500 biggest US companies. This is what most people mean by &#x27;the market&#x27;. It includes tech giants like Apple, Nvidia and Microsoft, so tech moves it a lot.</div></div><div class='tile'><div class='n'>Nasdaq</div><div class='p'>26,140.03</div><div class='c dn'>-2.15%</div><div class='d'>Mostly tech and growth companies. If it does worse than the S&amp;P, tech is lagging, which is bad for momentum stocks.</div></div><div class='tile'><div class='n'>Dow</div><div class='p'>52,002.41</div><div class='c dn'>-0.34%</div><div class='d'>30 big, older companies (banks, retailers, industrials). It tends to hold up when investors get cautious.</div></div><div class='tile'><div class='n'>Russell 2000</div><div class='p'>2,721.37</div><div class='c dn'>-1.66%</div><div class='d'>2,000 small companies. They depend more on growth and borrowing, so they do best when investors feel confident and rates are falling. Small caps lagging big caps means a weaker, narrower market.</div></div><div class='tile'><div class='n'>QQQ</div><div class='p'>$728.00</div><div class='c dn'>-0.13%</div><div class='d'>A fund that tracks the 100 biggest Nasdaq companies. Your market rule uses it: above its 20 EMA = good market.</div></div><div class='tile'><div class='n'>VIX</div><div class='p'>19.99</div><div class='c up'>+21.45%</div><div class='d'>The fear gauge. Under about 15 is calm, over 20 is nervous, over 30 is panic.</div></div></div>
+<p class="note">Change is today&#x27;s move versus yesterday&#x27;s close.</p></section>
+<section><h2>Who is up, who is down</h2><div class="panel"><div class="bars"><div class='row'><div class='lab'>QQQ</div><div class='track'><div class='bar d' style='width:3.0%'></div></div><div class='val dn'>-0.13%</div></div><div class='row'><div class='lab'>Dow</div><div class='track'><div class='bar d' style='width:7.8%'></div></div><div class='val dn'>-0.34%</div></div><div class='row'><div class='lab'>S&amp;P 500</div><div class='track'><div class='bar d' style='width:25.5%'></div></div><div class='val dn'>-1.09%</div></div><div class='row'><div class='lab'>Russell 2000</div><div class='track'><div class='bar d' style='width:38.7%'></div></div><div class='val dn'>-1.66%</div></div><div class='row'><div class='lab'>Nasdaq</div><div class='track'><div class='bar d' style='width:50.0%'></div></div><div class='val dn'>-2.15%</div></div></div>
+<p class="note"><b>What this means for you:</b> A broad sell-off. Most breakouts fail on days like this, so be patient. Tech (Nasdaq) is lagging the rest of the market. That makes momentum breakouts harder. Small stocks are lagging, which means investors are cautious. You want the S&amp;P, Nasdaq and small stocks all green before pressing your risk.</p></div></section>
+<section><h2>Sectors, hottest first</h2><div class='panel scroll'><table><thead><tr><th>Sector</th><th>ETF</th><th>Today</th><th>This week</th><th>This month</th><th>Heat</th></tr></thead><tbody><tr><td><b>Health care</b></td><td>XLV</td><td><span class='up'>+1.86%</span></td><td><span class='up'>+5.37%</span></td><td><span class='up'>+6.02%</span></td><td><span class='pill heat-super'>SUPER HOT</span></td></tr><tr><td><b>Cons. staples</b></td><td>XLP</td><td><span class='up'>+0.72%</span></td><td><span class='up'>+3.91%</span></td><td><span class='up'>+4.70%</span></td><td><span class='pill heat-super'>SUPER HOT</span></td></tr><tr><td><b>Energy</b></td><td>XLE</td><td><span class='dn'>-1.58%</span></td><td><span class='up'>+2.02%</span></td><td><span class='up'>+4.57%</span></td><td><span class='pill heat-hot'>HOT</span></td></tr><tr><td><b>Real estate</b></td><td>XLRE</td><td><span class='up'>+1.21%</span></td><td><span class='up'>+2.79%</span></td><td><span class='dn'>-1.09%</span></td><td><span class='pill heat-hot'>HOT</span></td></tr><tr><td><b>Cons. discretionary</b></td><td>XLY</td><td><span class='up'>+1.71%</span></td><td><span class='up'>+1.52%</span></td><td><span class='up'>+3.16%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Technology</b></td><td>XLK</td><td><span class='dn'>-0.65%</span></td><td><span class='dn'>-4.34%</span></td><td><span class='up'>+2.98%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Utilities</b></td><td>XLU</td><td><span class='dn'>-0.17%</span></td><td><span class='up'>+1.41%</span></td><td><span class='up'>+1.54%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Materials</b></td><td>XLB</td><td><span class='up'>+1.79%</span></td><td><span class='up'>+2.62%</span></td><td><span class='up'>+0.86%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Comm. services</b></td><td>XLC</td><td><span class='up'>+1.46%</span></td><td><span class='up'>+0.33%</span></td><td><span class='dn'>-0.17%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Industrials</b></td><td>XLI</td><td><span class='up'>+0.51%</span></td><td><span class='dn'>-0.30%</span></td><td><span class='dn'>-0.22%</span></td><td><span class='pill heat-no'>not hot</span></td></tr><tr><td><b>Financials</b></td><td>XLF</td><td><span class='up'>+1.38%</span></td><td><span class='up'>+1.92%</span></td><td><span class='dn'>-0.83%</span></td><td><span class='pill heat-no'>not hot</span></td></tr></tbody></table><p class='note'>A sector is HOT if its ETF is in the top 3 for the week or the month (and positive). SUPER HOT means top 3 for both. Trading in a hot sector is what lets you raise your risk.</p></div></section><section class='you'><h2>Rates and what they mean for you</h2><div class='two'><div><div class='kv'><span>10-year yield</span><span>5.10% (+0.9 basis points)</span></div></div><div><span class='pill take'>take</span><ul></ul></div></div></section>
+<section><h2>Fortuno watchlist</h2><div class='panel scroll'><table><thead><tr><th>Ticker</th><th>Breakout level (PDH)</th><th>Sector heat</th><th>Sector</th><th>Risk if stopped out</th></tr></thead><tbody><tr><td><b>GRAL</b> (LEADER)</td><td>$144.18</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>ILMN</b> (LEADER)</td><td>$276.55</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>CRL</b> (LEADER)</td><td>$310.53</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>AVAH</b> (LEADER)</td><td>$12.38</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>OSCR</b></td><td>$34.53</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>TVTX</b></td><td>$53.94</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>PACS</b></td><td>$45.00</td><td>SUPER HOT</td><td>Healthcare</td><td>0.25%</td></tr><tr><td><b>CLMT</b> (LEADER)</td><td>$59.16</td><td>HOT</td><td>Energy</td><td>0.25%</td></tr><tr><td><b>CXW</b></td><td>$34.24</td><td>HOT</td><td>Real Estate</td><td>0.25%</td></tr><tr><td><b>LIND</b> (LEADER)</td><td>$36.21</td><td>not hot</td><td>Consumer Cyclical</td><td>0.25%</td></tr><tr><td><b>SIG</b> (LEADER)</td><td>$109.06</td><td>not hot</td><td>Consumer Cyclical</td><td>0.25%</td></tr><tr><td><b>GEO</b></td><td>$32.16</td><td>not hot</td><td>Consumer Cyclical</td><td>0.25%</td></tr></tbody></table><p class='note'>Showing 12 of 31 from your latest scan. PDH = previous day high, your breakout level. Shares are worked out live when a stock breaks: dollars at risk divided by (entry minus the low of the breaking candle).</p></div></section>
+<section class="sources">No AI analysis this run (no API key, or it was turned off): numbers and headlines only. Not financial advice.</section>
+</main></body></html>
