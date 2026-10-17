@@ -1,0 +1,109 @@
+"""
+cloud_run.py  -  runs Fortuno AI on GitHub's computers (so your Mac can be closed).
+GitHub starts this at set times. It checks the clock (New York time) and decides what to do:
+
+  morning  (~8:15 AM ET)  scanner, then the Premarket Brief (website + phone)
+  alerts1  (~9:20 AM ET)  breakout alerts, until 2:50 PM
+  alerts2  (~2:55 PM ET)  breakout alerts, until the 4:00 PM close
+  evening  (~5:03 PM ET)  After-Close Brief (website + phone)
+
+GitHub's schedule only knows UTC, so we schedule each job twice (summer + winter time) and
+this file ignores the run that lands at the wrong hour. It also skips weekends and market holidays.
+"""
+import os, sys, subprocess, datetime as dt, glob
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("America/New_York")
+
+# the cron text in fortuno.yml  ->  (task, hour ET, minute ET)
+SCHEDULES = {
+    "15 12 * * 1-5": ("morning", 8, 15), "15 13 * * 1-5": ("morning", 8, 15),
+    "20 13 * * 1-5": ("alerts1", 9, 20), "20 14 * * 1-5": ("alerts1", 9, 20),
+    "55 18 * * 1-5": ("alerts2", 14, 55), "55 19 * * 1-5": ("alerts2", 14, 55),
+    "3 21 * * 1-5": ("evening", 17, 3), "3 22 * * 1-5": ("evening", 17, 3),
+}
+EARLY_MIN, LATE_MIN = 10, 50     # a run is accepted from 10 min before to 50 min after its planned time
+
+# NYSE closed days (double-check these each January)
+HOLIDAYS = {
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03",
+    "2026-09-07", "2026-11-26", "2026-12-25",
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05",
+    "2027-09-06", "2027-11-25", "2027-12-24",
+}
+SCAN_TIME_LIMIT = 35 * 60        # seconds. If the scanner is slower than this, we move on without it
+
+
+def run(cmd, timeout=None):
+    print("\n$ " + " ".join(cmd), flush=True)
+    try:
+        return subprocess.run(cmd, timeout=timeout).returncode
+    except subprocess.TimeoutExpired:
+        print(f"  (stopped after {timeout // 60} minutes)")
+        return 124
+
+
+def clean_old_files(now):
+    for f in glob.glob("alerts_sent_*.json"):
+        try:
+            d = dt.date.fromisoformat(f[len("alerts_sent_"):-len(".json")])
+            if (now.date() - d).days > 3:
+                os.remove(f)
+        except Exception:
+            pass
+
+
+def do_task(task, now):
+    py = sys.executable
+    if task == "morning":
+        before = os.path.getmtime("scan_results.csv") if os.path.exists("scan_results.csv") else 0
+        rc = run([py, "breakout_scanner.py"], timeout=SCAN_TIME_LIMIT)
+        after = os.path.getmtime("scan_results.csv") if os.path.exists("scan_results.csv") else 0
+        if rc == 0 and after > before:
+            open("scan_date.txt", "w").write(f"{now:%Y-%m-%d}")
+            print("Scan finished and saved.")
+        else:
+            print("WARNING: the scan did not finish. The brief will use the last saved scan.")
+        run([py, "market_brief.py", "--morning"])
+    elif task == "evening":
+        run([py, "market_brief.py", "--evening"])
+    elif task == "alerts1":
+        run([py, "breakout_alerts.py", "--stop-at", "14:50"])
+    elif task == "alerts2":
+        run([py, "breakout_alerts.py"])
+    elif task == "alerts":
+        run([py, "breakout_alerts.py"])
+    elif task == "demo-alert":
+        run([py, "breakout_alerts.py", "--demo"])
+    else:
+        print(f"Unknown task: {task}")
+
+
+def main():
+    now = dt.datetime.now(TZ)
+    clean_old_files(now)
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event == "workflow_dispatch":          # you pressed "Run workflow" yourself: do it, no clock checks
+        task = os.environ.get("TASK", "demo-alert")
+        print(f"Manual run: {task}")
+        do_task(task, now)
+        return
+    sched = os.environ.get("SCHEDULE", "")
+    if sched not in SCHEDULES:
+        print(f"Not a known schedule ({sched!r}). Nothing to do.")
+        return
+    task, h, m = SCHEDULES[sched]
+    planned = now.replace(hour=h, minute=m, second=0, microsecond=0)
+    mins_late = (now - planned).total_seconds() / 60
+    print(f"It is {now:%a %Y-%m-%d %I:%M %p} ET. Task {task} was planned for {h}:{m:02d} ({mins_late:+.0f} min).")
+    if now.weekday() >= 5 or f"{now:%Y-%m-%d}" in HOLIDAYS:
+        print("Market is closed today. Skipping.")
+        return
+    if not (-EARLY_MIN <= mins_late <= LATE_MIN):
+        print("This run landed at the wrong hour (the other daylight-saving copy, or GitHub was very late). Skipping.")
+        return
+    do_task(task, now)
+
+
+if __name__ == "__main__":
+    main()
