@@ -1,0 +1,10 @@
+# private or local-only files: never put these on GitHub
+github_token.txt
+ntfy_topic.txt
+market_brief.html
+scan_results*.html
+briefs/
+__pycache__/
+.venv/
+.env
+.DS_Store
