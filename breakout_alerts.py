@@ -27,7 +27,8 @@ How to run:
   python3 breakout_alerts.py --once     -> checks one time right now (any hour) and prints what it finds
   python3 breakout_alerts.py --once --no-push   -> same, but doesn't send anything to your phone
   python3 breakout_alerts.py --demo     -> sends one FAKE sample alert so you can see how it looks
-  python3 breakout_alerts.py --stop-at 14:50   -> stops at that ET time (the cloud uses this to hand over)
+  python3 breakout_alerts.py --stop-at 14:55   -> stops at that ET time (the cloud uses this to hand over)
+  python3 breakout_alerts.py --selftest -> while the market is open: sends 3 TEST alerts from live 1-minute prices
 Leave the Terminal window open while it watches. Press Ctrl+C to stop.
 """
 import os, sys, json, math, time, datetime as dt
@@ -195,6 +196,37 @@ def save_sent(now, sent):
         pass
 
 
+CLOUD = bool(os.environ.get("FORTUNO_CLOUD"))
+
+
+def _git(*a):
+    import subprocess
+    return subprocess.run(["git", *a], capture_output=True, text=True)
+
+
+def cloud_pull(now, sent):
+    """Cloud only: two alert jobs overlap for a while. Before sending, fetch the other job's 'already alerted' list."""
+    if not CLOUD:
+        return
+    _git("pull", "--rebase", "--autostash", "origin", "main")
+    sent |= load_sent(now)
+
+
+def cloud_push(now):
+    """Cloud only: share the 'already alerted' list right away so the other job will not repeat the alert."""
+    if not CLOUD:
+        return
+    f = sent_file(now)
+    _git("config", "user.name", "fortuno-bot")
+    _git("config", "user.email", "fortuno-bot@users.noreply.github.com")
+    _git("add", f)
+    _git("commit", "-m", "alert sent " + f)
+    for _ in range(3):
+        if _git("pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and _git("push").returncode == 0:
+            break
+        time.sleep(3)
+
+
 def one_pass(watch, sent, now, no_push=False):
     bars = get_bars(list(watch))
     found = 0
@@ -203,16 +235,44 @@ def one_pass(watch, sent, now, no_push=False):
             continue
         info = check_breakout(bars.get(tk), w["level"], w["risk"], now)
         if info:
+            if not no_push:
+                cloud_pull(now, sent)
+                if tk in sent:                 # the other job already sent this one
+                    continue
             title, body = format_alert(tk, info, w)
             push(title, body, no_push)
             sent.add(tk)
+            save_sent(now, sent)
+            if not no_push:
+                cloud_push(now)
             found += 1
     save_sent(now, sent)
     return found, len(bars)
 
 
+def selftest(no_push=False):
+    """Checks the live-data path for real: pulls today's 1-minute bars for 3 big stocks and sends 3 TEST alerts.
+    Run it while the market is open. It also tells you how old the newest price is."""
+    now = dt.datetime.now(TZ)
+    bars = get_bars(["AAPL", "MSFT", "NVDA"])
+    if not bars:
+        push("Alert self-test FAILED", "No 1-minute prices came back. The market may be closed, or Yahoo is blocking this computer.", no_push)
+        return
+    for tk, b in bars.items():
+        level = round(float(b["Close"].median()) * 0.995, 2)       # a level the stock already traded above
+        w = {"level": level, "risk": 0.5, "status": "TEST", "sector": "self-test", "score": None}
+        info = check_breakout(b, level, 0.5, now)
+        lag = (now - b.index[-1].to_pydatetime()).total_seconds() / 60
+        if info:
+            title, body = format_alert(tk, info, w)
+            push("TEST " + title, body + f"\nNewest 1-minute price is {lag:.0f} min old.", no_push)
+
+
 def main():
     args = sys.argv[1:]
+    if "--selftest" in args:
+        selftest("--no-push" in args)
+        return
     if "--demo" in args:
         w = {"level": 142.00, "risk": 0.5, "status": "SUPER HOT", "sector": "Technology"}
         info = {"entry": 142.01, "stop": 140.59, "shares": 35, "capped": False, "kind": "Broke the level",

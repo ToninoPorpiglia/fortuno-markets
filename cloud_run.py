@@ -2,25 +2,26 @@
 cloud_run.py  -  runs Fortuno AI on GitHub's computers (so your Mac can be closed).
 GitHub starts this at set times. It checks the clock (New York time) and decides what to do:
 
-  morning  (~8:15 AM ET)  scanner, then the Premarket Brief (website + phone)
-  alerts1  (~9:20 AM ET)  breakout alerts, until 2:50 PM
-  alerts2  (~2:55 PM ET)  breakout alerts, until the 4:00 PM close
-  evening  (~5:03 PM ET)  After-Close Brief (website + phone)
+  morning  (starts ~7:47 AM ET)  scanner, then the Premarket Brief, sent at exactly 9:00 AM
+  alerts1  (starts ~8:32 AM ET)  breakout alerts, until 2:55 PM
+  alerts2  (starts ~2:07 PM ET)  breakout alerts, until the 4:00 PM close
+  evening  (starts ~3:33 PM ET)  After-Close Brief, built after 4:10 PM, sent at exactly 4:30 PM
 
 GitHub's schedule only knows UTC, so we schedule each job twice (summer + winter time) and
 this file ignores the run that lands at the wrong hour. It also skips weekends and market holidays.
 """
-import os, sys, subprocess, datetime as dt, glob
+import os, sys, time, subprocess, datetime as dt, glob
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("America/New_York")
 
-# the cron text in fortuno.yml  ->  (task, hour ET, minute ET)
+# the cron text in fortuno.yml  ->  (task, hour ET, minute ET). Start times are EARLY on purpose:
+# GitHub often starts jobs 20-35 minutes late, and the briefs wait until the exact send time.
 SCHEDULES = {
-    "15 12 * * 1-5": ("morning", 8, 15), "15 13 * * 1-5": ("morning", 8, 15),
-    "20 13 * * 1-5": ("alerts1", 9, 20), "20 14 * * 1-5": ("alerts1", 9, 20),
-    "55 18 * * 1-5": ("alerts2", 14, 55), "55 19 * * 1-5": ("alerts2", 14, 55),
-    "3 21 * * 1-5": ("evening", 17, 3), "3 22 * * 1-5": ("evening", 17, 3),
+    "47 11 * * 1-5": ("morning", 7, 47), "47 12 * * 1-5": ("morning", 7, 47),
+    "32 12 * * 1-5": ("alerts1", 8, 32), "32 13 * * 1-5": ("alerts1", 8, 32),
+    "7 18 * * 1-5": ("alerts2", 14, 7), "7 19 * * 1-5": ("alerts2", 14, 7),
+    "33 19 * * 1-5": ("evening", 15, 33), "33 20 * * 1-5": ("evening", 15, 33),
 }
 EARLY_MIN, LATE_MIN = 10, 50     # a run is accepted from 10 min before to 50 min after its planned time
 
@@ -53,6 +54,40 @@ def clean_old_files(now):
             pass
 
 
+def git(*a):
+    return subprocess.run(["git", *a], capture_output=True, text=True)
+
+
+def commit_push(paths, msg):
+    """Save files to GitHub right now (so other jobs can see them)."""
+    git("config", "user.name", "fortuno-bot")
+    git("config", "user.email", "fortuno-bot@users.noreply.github.com")
+    for f in paths:
+        if os.path.exists(f):
+            git("add", "--", f)
+    git("commit", "-m", msg)
+    for _ in range(3):
+        if git("pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and git("push").returncode == 0:
+            return
+        time.sleep(5)
+
+
+def wait_for_todays_scan(now):
+    """The alert job starts before the scan is done. Wait (until 9:25 AM ET) for today's scan to show up on GitHub."""
+    today = f"{now:%Y-%m-%d}"
+    deadline = now.replace(hour=9, minute=25, second=0, microsecond=0)
+    while True:
+        try:
+            have = open("scan_date.txt").read().strip()
+        except Exception:
+            have = ""
+        if have == today or dt.datetime.now(TZ) >= deadline:
+            return
+        print("  waiting for this morning's scan...", flush=True)
+        time.sleep(45)
+        git("pull", "--rebase", "--autostash", "origin", "main")
+
+
 def do_task(task, now):
     py = sys.executable
     if task == "morning":
@@ -62,17 +97,22 @@ def do_task(task, now):
         if rc == 0 and after > before:
             open("scan_date.txt", "w").write(f"{now:%Y-%m-%d}")
             print("Scan finished and saved.")
+            commit_push(["scan_results.csv", "scan_all_passers.csv", "scan_date.txt"], f"Scan {now:%Y-%m-%d}")
         else:
             print("WARNING: the scan did not finish. The brief will use the last saved scan.")
-        run([py, "market_brief.py", "--morning"])
+        run([py, "market_brief.py", "--morning", "--not-before", "08:55", "--publish-at", "09:00"])
     elif task == "evening":
-        run([py, "market_brief.py", "--evening"])
+        run([py, "market_brief.py", "--evening", "--not-before", "16:10", "--publish-at", "16:30"])
     elif task == "alerts1":
-        run([py, "breakout_alerts.py", "--stop-at", "14:50"])
+        wait_for_todays_scan(now)
+        run([py, "breakout_alerts.py", "--stop-at", "14:55"])
     elif task == "alerts2":
+        wait_for_todays_scan(now)
         run([py, "breakout_alerts.py"])
     elif task == "alerts":
         run([py, "breakout_alerts.py"])
+    elif task == "alert-selftest":
+        run([py, "breakout_alerts.py", "--selftest"])
     elif task == "demo-alert":
         run([py, "breakout_alerts.py", "--demo"])
     else:

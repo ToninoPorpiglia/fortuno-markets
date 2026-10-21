@@ -17,7 +17,7 @@ How to run:
   python3 market_brief.py --scan       -> runs your scanner first, then makes the brief (slow)
   python3 market_brief.py --evening    -> force the After-Close version  (--morning forces Premarket)
 """
-import os, sys, json, html, base64, datetime as dt
+import os, sys, json, html, base64, time, datetime as dt
 from zoneinfo import ZoneInfo
 
 import requests
@@ -46,7 +46,7 @@ USE_AI       = True                           # needs ANTHROPIC_API_KEY. False =
 AI_MODEL     = "claude-sonnet-5-5"
 SCAN_CSV     = "scan_results.csv"             # made by breakout_scanner.py
 SCAN_ALL_CSV = "scan_all_passers.csv"         # everyone who passed the rules (used for the "close but not A+" box)
-LOGO_FILE    = "logo.jpg"                     # put your Fortuno Trading logo in this folder with this name (png or jpg)
+LOGO_FILE    = "logo.png"                     # put your Fortuno Trading logo in this folder with this name (png or jpg)
 OUT_HTML     = "market_brief.html"
 ARCHIVE_DIR  = "briefs"                       # every brief is also saved here, one file per run
 TZ           = ZoneInfo("America/New_York")
@@ -280,7 +280,7 @@ company news, M&A, AI developments, regulation, geopolitics, trade, tariffs, sec
 breadth, sentiment, and the largest stock movers with the reason they moved. Rank developments by expected market
 impact. Separate facts from interpretation. If you cannot verify something, leave it out. Never invent numbers.
 
-SCOPE: For index moves only talk about the S&P 500 (VOO/SPY), QQQ and small stocks (Russell 2000). Do NOT write about the 10-year yield, oil, gold, bitcoin, the Dow, or Nasdaq futures moves. Mention rates or inflation only if it is the main reason stocks moved today.
+SCOPE: For index moves in the overview, talk only about the S&P 500 (VOO/SPY), QQQ and small stocks (Russell 2000). Do not write about the Dow or the 10-year yield on their own. The separate WORLD section is where global news goes: it may include Europe (for example France, Italy, Germany, the UK), Asia, China, Japan, the Middle East, oil, central banks, politics, trade and tariffs, anything that is really moving markets or could.
 
 WRITING STYLE IS CRITICAL: write in simple, plain English a smart 19-year-old would follow. Whenever you use a term
 like CPI, yield, basis points, PPI, hike, breadth, guidance, short squeeze, etc., explain it in a few plain words
@@ -296,10 +296,13 @@ Reply with ONLY one JSON object (no markdown fences) in exactly this shape:
  "verdict_title": "Market for your strategy: <short plain verdict, e.g. not a clean breakout market>",
  "stance_line": "one or two plain sentences: what kind of tape this is for a breakout trader and why",
  "overview": "3 to 4 plain sentences: what is going on in the market right now and why, like telling a friend",
- "summary": [ {{"tag": "fact" | "take", "text": "..."}} ],            // EXACTLY 5 items, most important news only
+ "summary": [ {{"tag": "fact" | "take", "text": "..."}} ],            // EXACTLY 3 items, the 3 most important things only
  "ranked": [ {{"what": "max 15 words", "why": "ONE short plain-English sentence on why it matters, jargon explained", "call": "bullish" | "bearish" | "neutral"}} ],  // exactly 5, most important first, keep it SHORT
  "movers_up": [ {{"name": "Company (TICK)", "why": "+x% - the reason in 1-2 plain sentences, with a bit of context"}} ],   // up to 5
  "movers_down": [ {{"name": "Company (TICK)", "why": "-x% - the reason in 1-2 plain sentences, with a bit of context"}} ], // up to 5
+ "world": [ {{"where": "Paris, France", "what": "what happened, 1-2 plain sentences", "effect": "1-2 plain sentences: what this does to US stocks/QQQ/the S&P and what it means for a momentum trader"}} ],  // 5 to 7 items from DIFFERENT parts of the world, most market-relevant first
+ "earnings_this_week": [ {{"date": "Wed Oct 21", "company": "Nvidia", "ticker": "NVDA", "know": "if already reported: how it went and what drove it, 1-2 sentences. If not yet: what investors are watching", "good": "1 sentence: what a strong report would mean for the market and why", "bad": "1 sentence: what a weak report would mean and why"}} ],  // up to 8 of the most market-moving companies reporting THIS week
+ "earnings_next_week": [ {{"date": "Tue Oct 27", "company": "...", "ticker": "...", "know": "what investors are watching", "good": "...", "bad": "..."}} ],  // up to 8 for NEXT week
  "catalysts": [ {{"date": "Mon Oct 19", "event": "...", "why": "plain-English why it matters"}} ]  // next 1-2 weeks: data, Fed, earnings, auctions
 }}"""
 
@@ -320,8 +323,8 @@ def ai_analysis(label, tiles, tier, yld):
         resp = None
         for _ in range(4):
             resp = client.messages.create(
-                model=AI_MODEL, max_tokens=8000, messages=messages,
-                tools=[{"type": "web_search_20260318", "name": "web_search", "max_uses": 8}])
+                model=AI_MODEL, max_tokens=12000, messages=messages,
+                tools=[{"type": "web_search_20260318", "name": "web_search", "max_uses": 14}])
             if resp.stop_reason != "pause_turn":
                 break
             messages = [messages[0], {"role": "assistant", "content": resp.content}]
@@ -340,6 +343,42 @@ TIER_TEXT = {
     "BAD": ("bearish", "Market for your strategy: poor, stay small or flat",
             "QQQ is below its 20 EMA and 50 SMA. Protect your money and use the smallest risk."),
 }
+
+
+MEGA_CAPS = [("NVDA", "Nvidia"), ("AAPL", "Apple"), ("MSFT", "Microsoft"), ("GOOGL", "Alphabet"), ("AMZN", "Amazon"),
+             ("META", "Meta"), ("TSLA", "Tesla"), ("AVGO", "Broadcom"), ("NFLX", "Netflix"), ("AMD", "AMD"),
+             ("ORCL", "Oracle"), ("JPM", "JPMorgan"), ("COST", "Costco"), ("CRM", "Salesforce")]
+
+
+def earnings_fallback():
+    """No-AI backup: dates for the biggest companies (from Yahoo), with a general 'why it matters' line."""
+    today = dt.datetime.now(TZ).date()
+    monday = today - dt.timedelta(days=today.weekday())
+    this_end, next_end = monday + dt.timedelta(days=6), monday + dt.timedelta(days=13)
+    this_w, next_w = [], []
+    for sym, name in MEGA_CAPS:
+        try:
+            cal = yf.Ticker(sym).calendar
+            dates = cal.get("Earnings Date") if isinstance(cal, dict) else None
+            d = dates[0] if dates else None
+            if d is None:
+                continue
+            d = d if isinstance(d, dt.date) else pd.Timestamp(d).date()
+        except Exception:
+            continue
+        row = {"date": d.strftime("%a %b %d"), "company": name, "ticker": sym,
+               "know": "Big company, so its report can move the whole market.",
+               "good": "Strong sales and a good outlook usually lift the whole market, especially tech.",
+               "bad": "A miss or a weak outlook can pull the whole market down, especially tech.", "_d": d}
+        if monday <= d <= this_end:
+            this_w.append(row)
+        elif this_end < d <= next_end:
+            next_w.append(row)
+    for lst in (this_w, next_w):
+        lst.sort(key=lambda r: r["_d"])
+        for r in lst:
+            r.pop("_d", None)
+    return {"earnings_this_week": this_w, "earnings_next_week": next_w}
 
 
 def market_overview(tiles, tier, sectors):
@@ -368,7 +407,7 @@ def market_overview(tiles, tier, sectors):
 
 
 def fallback_ai(tiles, tier, headlines, yld, sectors=None):
-    """Used when there is no AI: a plain summary from the numbers alone. Always aims for 5 items."""
+    """Used when there is no AI: a plain summary from the numbers alone. Always aims for 3 items."""
     by = {t["name"].split(" (")[0].replace(" futures", ""): t for t in tiles}
     items = []
     if "S&P 500" in by:
@@ -393,7 +432,7 @@ def fallback_ai(tiles, tier, headlines, yld, sectors=None):
         mood = "calm" if v < 15 else "a little nervous" if v < 20 else "nervous" if v < 30 else "in panic"
         items.append({"tag": "take", "text": f"The VIX (fear gauge) is {v:.1f}, so investors are {mood}."})
     stance, title, line = TIER_TEXT.get(tier["tier"] if tier else "", ("neutral", "Market for your strategy: unknown", "Could not check QQQ right now."))
-    return {"stance": stance, "verdict_title": title, "stance_line": line, "summary": items[:5],
+    return {"stance": stance, "verdict_title": title, "stance_line": line, "summary": items[:3],
             "overview": market_overview(tiles, tier, sectors)}
 
 
@@ -502,6 +541,33 @@ def build_page(label, now, tiles, sectors, tier, watch, ai, ai_used, yld=None, t
     overview_txt = ai.get("overview") or market_overview(tiles, tier, sectors)
     overview_html = "<section><h2>What is going on</h2><div class='panel'><p style='margin:0'>" + esc(overview_txt) + "</p></div></section>"
 
+    world_html = ""
+    if ai.get("world"):
+        body = "".join(f"<tr><td><b>{esc(w.get('where', ''))}</b></td><td>{esc(w.get('what', ''))}</td><td>{esc(w.get('effect', ''))}</td></tr>"
+                       for w in ai["world"][:7])
+        world_html = ("<section><h2>Around the world</h2><div class='panel scroll'><table><thead><tr><th>Where</th><th>What is happening</th>"
+                      f"<th>What it means for markets and you</th></tr></thead><tbody>{body}</tbody></table></div></section>")
+    elif not ai_used:
+        world_html = ("<section><h2>Around the world</h2><div class='panel'><p class='note'>World news and plain-English explanations "
+                      "show up here when the AI writer is turned on.</p></div></section>")
+
+    def earn_table(rows, title):
+        if not rows:
+            return ""
+        body = "".join(f"<tr><td>{esc(e.get('date', ''))}</td><td><b>{esc(e.get('company', ''))}</b><br><span class='note'>{esc(e.get('ticker', ''))}</span></td>"
+                       f"<td>{esc(e.get('know', ''))}</td><td class='up'>{esc(e.get('good', ''))}</td><td class='dn'>{esc(e.get('bad', ''))}</td></tr>"
+                       for e in rows[:8])
+        return (f"<h3 style='margin:14px 0 6px'>{esc(title)}</h3><table><thead><tr><th>Date</th><th>Company</th><th>What to know</th>"
+                f"<th>If it is good</th><th>If it is bad</th></tr></thead><tbody>{body}</tbody></table>")
+
+    earn_html = ""
+    etw, enw = ai.get("earnings_this_week") or [], ai.get("earnings_next_week") or []
+    if etw or enw:
+        earn_html = ("<section><h2>Earnings: this week and next</h2><div class='panel scroll'>"
+                     + earn_table(etw, "This week") + earn_table(enw, "Next week")
+                     + "<p class='note'>Earnings = a company reporting how much it sold and earned. Big companies move the whole market, "
+                       "and what they say about the future (guidance) often matters more than the past quarter.</p></div></section>")
+
     cats = ""
     if ai.get("catalysts"):
         body = "".join(f"<tr><td>{esc(c.get('date', ''))}</td><td>{esc(c.get('event', ''))}</td><td>{esc(c.get('why', ''))}</td></tr>"
@@ -575,14 +641,14 @@ def build_page(label, now, tiles, sectors, tier, watch, ai, ai_used, yld=None, t
 <h1>Fortuno <span>Markets AI</span></h1>
 <div class="verdict"><span class="pill brief">{esc(label)}</span><div><b>{esc(vtitle)}</b><p>{esc(ai.get('stance_line', ''))}</p>{tier_txt}</div></div></header>
 {overview_html}
-<section><h2>The 5 things to know</h2><ul class="sum">{summary}</ul>
+<section><h2>The 3 things to know</h2><ul class="sum">{summary}</ul>
 <p class="note"><span class="pill fact">fact</span> = reported data. <span class="pill take">take</span> = interpretation.</p></section>
 {recap_html}
 <section><h2>Scoreboard</h2><div class="tiles">{tile_html}</div>
 <p class="note">{esc(tile_note or 'Change is versus the previous close.')}</p></section>
 <section><h2>Who is up, who is down</h2><div class="panel"><div class="bars">{bars_html(bar_data, mx)}</div>
 <p class="note"><b>What this means for you:</b> {esc(bars_meaning(tiles))} You want the S&amp;P, QQQ and small stocks all green before pressing your risk.</p></div></section>
-{sec_html}{ranked}{movers}{rates}{cats}
+{sec_html}{ranked}{world_html}{movers}{earn_html}{rates}{cats}
 <section><h2>Fortuno watchlist</h2>{wl}</section>
 <section class="sources">{esc(ai_note)} Not financial advice.</section>
 </main></body></html>"""
@@ -714,6 +780,29 @@ def publish_to_github(page_html, now):
 
 
 # ------------------------------ MAIN ------------------------------
+def flag_time(args, name):
+    """--not-before 08:55 / --publish-at 09:00 (New York time) -> datetime.time or None."""
+    if name in args:
+        try:
+            h, m = args[args.index(name) + 1].split(":")
+            return dt.time(int(h), int(m))
+        except Exception:
+            print(f"  (could not read {name}; use it like {name} 09:00)")
+    return None
+
+
+def wait_until(t, why, max_minutes=120):
+    """Sleeps until clock time t (New York). Skips the wait if t already passed or is far away."""
+    if t is None:
+        return
+    now = dt.datetime.now(TZ)
+    target = now.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+    secs = (target - now).total_seconds()
+    if 0 < secs <= max_minutes * 60:
+        print(f"  Waiting until {t:%I:%M %p} ET for {why} ({secs / 60:.0f} min)...", flush=True)
+        time.sleep(secs)
+
+
 def main():
     args = sys.argv[1:]
     now = dt.datetime.now(TZ)
@@ -723,6 +812,8 @@ def main():
         print("Running your scanner first (this takes a few minutes)...")
         import subprocess
         subprocess.run([sys.executable, "breakout_scanner.py"], check=False)
+    not_before, publish_at = flag_time(args, "--not-before"), flag_time(args, "--publish-at")
+    wait_until(not_before, "fresh data")
     print(f"{label} - getting data...")
 
     tiles = get_tiles(premarket=not evening)
@@ -738,6 +829,8 @@ def main():
     ai_used = ai is not None
     if ai is None:
         ai = fallback_ai(tiles, tier, get_headlines(), yld, sectors)
+    if not (ai.get("earnings_this_week") or ai.get("earnings_next_week")):
+        ai.update(earnings_fallback())
     note = ("Index numbers are FUTURES (they trade before the open); change is versus the last close." if not evening
             else "Change is today's move versus yesterday's close.")
 
@@ -747,6 +840,8 @@ def main():
     else:
         save_state(now, tiles, tier)
 
+    wait_until(publish_at, "the planned send time")
+    now = dt.datetime.now(TZ)                      # the page shows the real send time
     page = build_page(label, now, tiles, sectors, tier, watch, ai, ai_used, yld, note, recap=recap)
     with open(OUT_HTML, "w", encoding="utf-8") as f:
         f.write(page)
