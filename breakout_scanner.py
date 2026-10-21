@@ -75,7 +75,7 @@ VOLUME_DAYS = 50       # avg volume lookback
 
 # --- Tightness (the consolidation part). Change these to experiment! ---
 TIGHT_DAYS = 5            # how many recent days make up the "base" (try 4, 5, 10)
-MAX_SHRINK = 0.7          # a) avg daily range of those days must be <= 70% of normal ADR
+MAX_SHRINK = 0.8          # a) avg daily range of those days must be <= 70% of normal ADR
 MAX_BASE_ADR = 1.5        # b) the whole base must be <= 1.5 ADRs tall (1.0 is very strict)
 MIN_CLOSE_POSITION = 0.25 # c) close must be above the bottom quarter of the base (0 = off)
 SMA200_SLACK = 1.0        # 200 SMA must not be falling (0.98 would allow a 2% dip)
